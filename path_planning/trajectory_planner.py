@@ -386,8 +386,9 @@ class PathPlan(Node):
             new_idx = self.extend_tree(pose_sample)
             if new_idx is None:
                 continue
-            for idx in new_idx:
-                self.rewire_tree(idx)
+            if self.goal_idx is not None:
+                for idx in new_idx:
+                    self.rewire_tree(idx)
             # try to reach goal
             for idx in new_idx:
                 # self.get_logger().info(f'TRYING GOAL FROM {idx}')

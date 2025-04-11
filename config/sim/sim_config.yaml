@@ -6,17 +6,19 @@ trajectory_planner:
     initial_pose_topic: "/initialpose"
     car_length: 0.45
     max_steer: 0.8
-    sample_goal_prob: 0.05
+    dilate_radius: 1
+    sample_goal_prob: 0.1
     neighbor_type: "num" # num or radius
     neighbor_num: 10
     neighbor_radius: 2.0
     num_iters: 100
-    dist_limit: False
+    dist_limit: True
     discretize_path_progress: True
     progress_discretization_dist: 0.5
     discretize_path_publish: True
     publish_discretization_dist: 0.5
-    check_discretization_dist: 0.1
+    check_discretization_dist: 0.2
+    shortcutting_iters: 100
 trajectory_follower:
   ros__parameters:
     odom_topic: "/odom"

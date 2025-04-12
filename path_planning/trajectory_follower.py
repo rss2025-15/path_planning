@@ -3,7 +3,7 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-
+from visualization_msgs.msg import Marker
 from tf_transformations import quaternion_from_euler, euler_from_quaternion
 
 from .utils import LineTrajectory
@@ -42,7 +42,23 @@ class PurePursuit(Node):
         self.pose_sub = self.create_subscription(Odometry, self.odom_topic, self.pose_callback, 1)
         # this might not work -- if not listen to transform of map to baselink
 
-        
+
+        #adding this fake subscriptions for visualization of markers
+        self.loaded_traj_sub = self.create_subscription(PoseArray,
+                                                 "/loaded_trajectory/path",
+                                                 self.fake_callback,
+                                                 1)
+
+        self.start_sub = self.create_subscription(Marker,
+                                                 "/loaded_trajectory/start_point",
+                                                 self.fake_callback,
+                                                 1)
+        self.end_sub = self.create_subscription(Marker,
+                                                 "/loaded_trajectory/end_pose",
+                                                 self.fake_callback,
+                                                 1)
+
+
     def pose_callback(self, odometry_msg):
         orientation = euler_from_quaternion([odometry_msg.pose.pose.orientation.x, odometry_msg.pose.pose.orientation.y, odometry_msg.pose.pose.orientation.z, odometry_msg.pose.pose.orientation.w])[-1]
         robot_pose = np.array([odometry_msg.pose.pose.position.x, odometry_msg.pose.pose.position.y, orientation])
@@ -65,13 +81,13 @@ class PurePursuit(Node):
                     dist_to_segments[i] = np.linalg.norm([hehe[0] - robot_pose[0], hehe[1] - robot_pose[1]])
 
             # CHOOSING SEGMENT THAT FALLS ON LOOKAHEAD
-            # https://codereview.stackexchange.com/questions/86421/line-segment-to-circle-collision-algorithm/86428#86428 
+            # https://codereview.stackexchange.com/questions/86421/line-segment-to-circle-collision-algorithm/86428#86428
             lookahead_pt = None
             while lookahead_pt is None:
                 i = np.argmin(dist_to_segments) # closest segment currently
 
                 # WE HAVE DECIDED WE NEED TO LOOK AT BOTH CLOSEST AND SECOND CLOSEST SEGMENTS!!!
-                
+
                 segment_v = self.trajectory.points[i+1] - self.trajectory.points[i] # V
                 dist_to_start = self.trajectory.points[i] - robot_pose[0:1] # P1-Q
 
@@ -84,16 +100,16 @@ class PurePursuit(Node):
                     dist_to_segments[i] = float('inf')
 
                     # ADD SOMETHING TO MAKE THE CAR JUST DRIVE UNTIL IT IS CLOSE TO THE TRAJECTORY!!
-                    continue 
+                    continue
 
                 # parametrized intersection pts
                 t_pts = np.array([(-b + math.sqrt(disc))/(2*a), (-b - math.sqrt(disc))/(2*a)])
-                t_intersected_pts = t_pts[(t_pts >= 0) & (t_pts <= 1)] 
+                t_intersected_pts = t_pts[(t_pts >= 0) & (t_pts <= 1)]
 
                 if len(t_intersected_pts) == 0: # no intersection within segment
                     dist_to_segments[i] = float('inf')
-                    continue 
-                
+                    continue
+
                 pts = self.trajectory.points[i] + t_intersected_pts*(np.linalg.norm(segment_v))
                 angles = np.arctan2(pts[:,1], pts[:,0])
                 # lookahead_pt = pts[np.argmin(np.abs(angles - robot_pose[2]))] # for getting lookahead pt in map
@@ -106,7 +122,7 @@ class PurePursuit(Node):
             self.cmd_speed = 1.0
             self.drive_cmd(steer_angle, self.cmd_speed)
             self.get_logger().info('steering {steer_angle} >:)')
-                    
+
     def drive_cmd(self, steer, speed = 1.0):
         drive_cmd_drive = AckermannDriveStamped()
         drive_cmd_drive.drive.speed = speed
@@ -116,7 +132,7 @@ class PurePursuit(Node):
         drive_cmd_drive.drive.jerk = 0.0
         drive_cmd_drive.header.stamp = self.get_clock().now().to_msg()
         self.drive_pub.publish(drive_cmd_drive)
-    
+
     # def stop_cmd(self):
     #     stop_cmd_drive = AckermannDriveStamped()
     #     stop_cmd_drive.drive.speed = 0.0
@@ -137,7 +153,8 @@ class PurePursuit(Node):
 
         self.initialized_traj = True
 
-
+    def fake_callback():
+        return
 
 
 def main(args=None):

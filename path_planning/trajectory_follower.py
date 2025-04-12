@@ -3,6 +3,7 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from visualization_msgs.msg import Marker
 
 from tf_transformations import quaternion_from_euler, euler_from_quaternion
 
@@ -45,6 +46,23 @@ class PurePursuit(Node):
         self.pose_sub = self.create_subscription(Odometry, self.odom_topic, self.pose_callback, 1)
         # this might not work -- if not listen to transform of map to baselink
 
+
+        #adding this for vizualization of path on rviz
+        self.loaded_traj_sub = self.create_subscription(PoseArray,
+                                                 "/loaded_trajectory/path",
+                                                 self.fake_callback,
+                                                 1)
+
+        self.start_sub = self.create_subscription(Marker,
+                                                 "/loaded_trajectory/start_point",
+                                                 self.fake_callback,
+                                                 1)
+        self.end_sub = self.create_subscription(Marker,
+                                                 "/loaded_trajectory/end_pose",
+                                                 self.fake_callback,
+                                                 1)
+
+
     def init_callback(self, init_msg):
         self.initialized_pose = True
 
@@ -70,7 +88,7 @@ class PurePursuit(Node):
                     dist_to_segments[i] = np.linalg.norm([hehe[0] - robot_pose[0], hehe[1] - robot_pose[1]])
 
             # CHOOSING SEGMENT THAT FALLS ON LOOKAHEAD
-            # https://codereview.stackexchange.com/questions/86421/line-segment-to-circle-collision-algorithm/86428#86428 
+            # https://codereview.stackexchange.com/questions/86421/line-segment-to-circle-collision-algorithm/86428#86428
             lookahead_angle = None
             segments_checked = 0
             too_far = False
@@ -93,17 +111,17 @@ class PurePursuit(Node):
 
                 if disc < 0: # no intersection like ever even if the segment was extended
                     too_far = True
-                    break 
+                    break
 
                 # parametrized intersection pts
                 t_pts = np.array([(-b + math.sqrt(disc))/(2*a), (-b - math.sqrt(disc))/(2*a)])
-                t_intersected_pts = t_pts[(t_pts >= 0) & (t_pts <= 1)] 
+                t_intersected_pts = t_pts[(t_pts >= 0) & (t_pts <= 1)]
                 self.get_logger().info(f"t_intersected_pts{t_intersected_pts}")
 
                 if len(t_intersected_pts) == 0: # no intersection within segment
                     dist_to_segments[i] = float('inf')
-                    continue 
-                
+                    continue
+
                 pts = s_1 + t_intersected_pts[-1]*(segment_v)
                 self.get_logger().info(f"pts{pts}")
                 # angles = np.arctan2(pts[:,1], pts[:,0])
@@ -117,7 +135,7 @@ class PurePursuit(Node):
             self.cmd_speed = 1.0
             self.drive_cmd(steer_angle, self.cmd_speed)
             self.get_logger().info(f'steering {steer_angle} >:)')
-                    
+
     def drive_cmd(self, steer, speed = 1.0):
         drive_cmd_drive = AckermannDriveStamped()
         drive_cmd_drive.drive.speed = speed
@@ -127,7 +145,7 @@ class PurePursuit(Node):
         drive_cmd_drive.drive.jerk = 0.0
         drive_cmd_drive.header.stamp = self.get_clock().now().to_msg()
         self.drive_pub.publish(drive_cmd_drive)
-    
+
     # def stop_cmd(self):
     #     stop_cmd_drive = AckermannDriveStamped()
     #     stop_cmd_drive.drive.speed = 0.0
@@ -148,7 +166,8 @@ class PurePursuit(Node):
 
         self.initialized_traj = True
 
-
+    def fake_callback():
+       return
 
 
 def main(args=None):

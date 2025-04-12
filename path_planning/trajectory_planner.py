@@ -19,9 +19,12 @@ class PathPlan(Node):
         self.declare_parameter('map_topic', "default")
         self.declare_parameter('initial_pose_topic', "default")
 
-        self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
-        self.map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
-        self.initial_pose_topic = self.get_parameter('initial_pose_topic').get_parameter_value().string_value
+        # self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
+        # self.map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
+        # self.initial_pose_topic = self.get_parameter('initial_pose_topic').get_parameter_value().string_value
+        self.odom_topic = "/odom"
+        self.map_topic = "/map"
+        self.initial_pose_topic = "/initialpose"
 
         self.map_sub = self.create_subscription(
             OccupancyGrid,
@@ -59,10 +62,13 @@ class PathPlan(Node):
         self.COLS = None
         self.DOWNSAMPLED_ROWS = None
         self.DOWNSAMPLED_COLS = None
-        self.pos = [0, 0]
+        self.pos = (0, 0)
+
+        self.get_logger().info("Trajectory planner node started")
 
 
     def map_cb(self, msg):
+        self.get_logger().info("Map received")
         self.map = msg
         self.ROWS = msg.info.height
         self.COLS = msg.info.width
@@ -73,14 +79,21 @@ class PathPlan(Node):
         self.DOWNSAMPLED_COLS = self.downsampled_map.shape[1]
 
     def pose_cb(self, pose):
-        self.pos = [pose.pose.pose.position.x, pose.pose.pose.position.y]
+        self.pos = (pose.pose.pose.position.x, pose.pose.pose.position.y)
+        self.get_logger().info("Pose received")
+        self.trajectory.clear()
 
     def goal_cb(self, msg):
-        self.trajectory.clear()
-        self.plan_path(self.pos, [msg.pose.position.x, msg.pose.position.y], self.map, self.map_data)
+        self.goal = (msg.pose.position.x, msg.pose.position.y)
+        self.get_logger().info("Goal received")
+        self.plan_path(self.pos, (msg.pose.position.x, msg.pose.position.y), self.map)
 
     def plan_path(self, start_point, end_point, map, map_data):
         map_info = map.info
+
+        if map_info.resolution == 0.0:
+            self.get_logger().warn("Map resolution is 0, waiting for valid map")
+            return
 
         # convert map to pixel coordinates
         start = self.map_to_grid(start_point, map_info)
@@ -91,7 +104,9 @@ class PathPlan(Node):
             self.get_logger().info("No path found")
             return
         
-        self.get_logger("Path found")
+        self.get_logger().info("Path found")
+        self.get_logger().info("Path length: {}".format(len(path)))
+        self.get_logger().info("Path: {}".format(path))
         for point in path:
             self.trajectory.addPoint(self.grid_to_map(point, map_info))
             
@@ -125,6 +140,7 @@ class PathPlan(Node):
     
     def a_star(self, start, goal, grid):
         """everything in grid coordinates"""
+        self.get_logger().info("A* path planning")
         open_list = []
         heapq.heappush(open_list, (0, start))
         came_from = {}

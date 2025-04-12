@@ -40,6 +40,7 @@ class PurePursuit(Node):
 
         # for getting robot pose in map frame -- change this to localization output for real world
         self.pose_sub = self.create_subscription(Odometry, self.odom_topic, self.pose_callback, 1)
+        # this might not work -- if not listen to transform of map to baselink
 
         
     def pose_callback(self, odometry_msg):
@@ -68,6 +69,9 @@ class PurePursuit(Node):
             lookahead_pt = None
             while lookahead_pt is None:
                 i = np.argmin(dist_to_segments) # closest segment currently
+
+                # WE HAVE DECIDED WE NEED TO LOOK AT BOTH CLOSEST AND SECOND CLOSEST SEGMENTS!!!
+                
                 segment_v = self.trajectory.points[i+1] - self.trajectory.points[i] # V
                 dist_to_start = self.trajectory.points[i] - robot_pose[0:1] # P1-Q
 
@@ -78,6 +82,8 @@ class PurePursuit(Node):
 
                 if disc < 0: # no intersection like ever even if the segment was extended
                     dist_to_segments[i] = float('inf')
+
+                    # ADD SOMETHING TO MAKE THE CAR JUST DRIVE UNTIL IT IS CLOSE TO THE TRAJECTORY!!
                     continue 
 
                 # parametrized intersection pts

@@ -8,14 +8,6 @@ from .utils import LineTrajectory
 import numpy as np
 import heapq
 
-class Cell:
-    def __init__(self):
-        self.parent_r = 0  
-        self.parent_c = 0  
-        self.f = float('inf')  # f = g + h
-        self.g = 0  # actual cost
-        self.h = float('inf')  # heuristic cost
-
 class PathPlan(Node):
     """ Listens for goal pose published by RViz and uses it to plan a path from
     current car pose.
@@ -130,7 +122,6 @@ class PathPlan(Node):
     def heuristic(self, start, goal):
         # euclidean distance
         return np.linalg.norm(np.array(start) - np.array(goal))
-
     
     def a_star(self, start, goal, grid):
         """everything in grid coordinates"""

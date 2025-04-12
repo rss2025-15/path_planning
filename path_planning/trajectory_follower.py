@@ -1,6 +1,6 @@
 import rclpy
 from ackermann_msgs.msg import AckermannDriveStamped
-from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped, PoseStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from visualization_msgs.msg import Marker
@@ -43,9 +43,11 @@ class PurePursuit(Node):
         self.initialized_pose = False
         self.init_sub = self.create_subscription(PoseWithCovarianceStamped, "/initialpose", self.init_callback, 1)
         # for getting robot pose in map frame -- change this to localization output for real world
-        self.pose_sub = self.create_subscription(Odometry, self.odom_topic, self.pose_callback, 1)
+        # self.pose_sub = self.create_subscription(Odometry, self.odom_topic, self.pose_callback, 1)
         # this might not work -- if not listen to transform of map to baselink
 
+        #This estimated pose is gonna come from the localization lab
+        self.estimated_robot_sub = self.create_subscription(PoseStamped, '/estimated_robot', self.pose_callback, 1)
 
         #adding this for vizualization of path on rviz
         self.loaded_traj_sub = self.create_subscription(PoseArray,
@@ -66,10 +68,23 @@ class PurePursuit(Node):
     def init_callback(self, init_msg):
         self.initialized_pose = True
 
-    def pose_callback(self, odometry_msg):
-        orientation = euler_from_quaternion([odometry_msg.pose.pose.orientation.x, odometry_msg.pose.pose.orientation.y, odometry_msg.pose.pose.orientation.z, odometry_msg.pose.pose.orientation.w])[-1]
-        robot_pose = np.array([odometry_msg.pose.pose.position.x, odometry_msg.pose.pose.position.y, orientation])
+    def pose_callback(self, estimated_robot_msg):
+        self.get_logger().info(f'{type(estimated_robot_msg)} is the message type' )
+        # orientation = euler_from_quaternion([odometry_msg.pose.pose.orientation.x, odometry_msg.pose.pose.orientation.y, odometry_msg.pose.pose.orientation.z, odometry_msg.pose.pose.orientation.w])[-1]
+        orientation = euler_from_quaternion([
+        estimated_robot_msg.pose.orientation.x,
+        estimated_robot_msg.pose.orientation.y,
+        estimated_robot_msg.pose.orientation.z,
+        estimated_robot_msg.pose.orientation.w
+    ])[-1]
 
+        robot_pose = np.array([
+            estimated_robot_msg.pose.position.x,
+            estimated_robot_msg.pose.position.y,
+            orientation
+        ])
+
+        self.get_logger().info(f'current robot pose: {robot_pose}')
         if self.initialized_traj and self.initialized_pose:
             # FINDING CLOSEST SEGMENT
             # https://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment/1501725#1501725
@@ -166,7 +181,7 @@ class PurePursuit(Node):
 
         self.initialized_traj = True
 
-    def fake_callback():
+    def fake_callback(self, extra):
        return
 
 

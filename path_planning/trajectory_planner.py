@@ -5,7 +5,15 @@ assert rclpy
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, PoseArray
 from nav_msgs.msg import OccupancyGrid
 from .utils import LineTrajectory
+import numpy as np
 
+class Cell:
+    def __init__(self):
+        self.parent_r = 0  
+        self.parent_c = 0  
+        self.f = float('inf')  # f = g + h
+        self.g = 0  # actual cost
+        self.h = float('inf')  # heuristic cost
 
 class PathPlan(Node):
     """ Listens for goal pose published by RViz and uses it to plan a path from
@@ -50,8 +58,26 @@ class PathPlan(Node):
 
         self.trajectory = LineTrajectory(node=self, viz_namespace="/planned_trajectory")
 
+        self.map = OccupancyGrid()
+        self.map_data = np.array([0, 0])
+        self.downsampled_map = None
+        self.downsampling_factor = 1
+        self.ROWS = None
+        self.COLS = None
+        self.DOWNSAMPLED_ROWS = None
+        self.DOWNSAMPLED_COLS = None
+        self.pos = [0, 0]
+
+
     def map_cb(self, msg):
-        raise NotImplementedError
+        self.map = msg
+        self.ROWS = msg.info.height
+        self.COLS = msg.info.width
+        map_info = np.array(msg.data).reshape((self.ROWS, self.COLS)) # reshape flattened array
+        self.map_data = map_info
+        self.downsampled_map = map_info[::self.downsampling_factor, ::self.downsampling_factor]
+        self.DOWNSAMPLED_ROWS = self.downsampled_map.shape[0]
+        self.DOWNSAMPLED_COLS = self.downsampled_map.shape[1]
 
     def pose_cb(self, pose):
         raise NotImplementedError

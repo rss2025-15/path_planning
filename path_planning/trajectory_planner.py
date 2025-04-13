@@ -7,6 +7,9 @@ from nav_msgs.msg import OccupancyGrid
 from .utils import LineTrajectory
 import numpy as np
 import heapq
+import math
+import cv2 
+import imageio
 
 class PathPlan(Node):
     """ Listens for goal pose published by RViz and uses it to plan a path from
@@ -55,50 +58,71 @@ class PathPlan(Node):
         self.trajectory = LineTrajectory(node=self, viz_namespace="/planned_trajectory")
 
         self.map = OccupancyGrid()
-        self.map_data = np.array([0, 0])
+        self.map_data = None
+        self.origin = None
         self.downsampled_map = None
         self.downsampling_factor = 1
         self.ROWS = None
         self.COLS = None
+        self.RES = None
         self.DOWNSAMPLED_ROWS = None
         self.DOWNSAMPLED_COLS = None
         self.pos = (0, 0)
+        self.dilation = 10
+
 
         self.get_logger().info("Trajectory planner node started")
 
 
     def map_cb(self, msg):
-        self.get_logger().info("Map received")
         self.map = msg
         self.ROWS = msg.info.height
         self.COLS = msg.info.width
-        map_info = np.array(msg.data).reshape((self.ROWS, self.COLS)) # reshape flattened array
-        self.map_data = map_info
-        self.downsampled_map = map_info[::self.downsampling_factor, ::self.downsampling_factor]
+        self.RES = msg.info.resolution
+        self.origin = (msg.info.origin.position.x, msg.info.origin.position.y, self.euler_from_quaternion(msg.info.origin.orientation)[2])
+        self.get_logger().info("Map size: {} x {}".format(self.ROWS, self.COLS))
+
+
+        g = np.transpose(np.reshape(msg.data, (self.ROWS, self.COLS)))
+        self.map = np.where(g == -1, 1, g)
+        self.map = cv2.dilate(self.map.astype('uint8'), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.dilation, self.dilation)))
+        # map_info = np.array(msg.data).reshape((self.ROWS, self.COLS)) # reshape flattened array
+        # map_info = cv2.dilate(map_info.astype('uint8'), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.dilation, self.dilation)))
+        # self.map_data = map_info
+
+        self.downsampled_map = self.map[::self.downsampling_factor, ::self.downsampling_factor]
         self.DOWNSAMPLED_ROWS = self.downsampled_map.shape[0]
         self.DOWNSAMPLED_COLS = self.downsampled_map.shape[1]
+        self.get_logger().info("Downsampled map size: {} x {}".format(self.DOWNSAMPLED_ROWS, self.DOWNSAMPLED_COLS))
+        self.get_logger().info("Map received")
+        imageio.imwrite("./src/path_planning/map.png", self.downsampled_map)
 
     def pose_cb(self, pose):
         self.pos = (pose.pose.pose.position.x, pose.pose.pose.position.y)
         self.get_logger().info("Pose received")
-        self.trajectory.clear()
+        # self.trajectory.clear()
 
     def goal_cb(self, msg):
         self.goal = (msg.pose.position.x, msg.pose.position.y)
         self.get_logger().info("Goal received")
         self.plan_path(self.pos, (msg.pose.position.x, msg.pose.position.y), self.map)
 
-    def plan_path(self, start_point, end_point, map, map_data):
-        map_info = map.info
+    def plan_path(self, start_point, end_point, map):
+        start_time = self.get_clock().now()
+        resolution = self.RES
+        self.get_logger().info("Planning path from {} to {}".format(start_point, end_point))
 
-        if map_info.resolution == 0.0:
+        if resolution == 0.0:
             self.get_logger().warn("Map resolution is 0, waiting for valid map")
             return
 
         # convert map to pixel coordinates
-        start = self.map_to_grid(start_point, map_info)
-        goal = self.map_to_grid(end_point, map_info)
+        self.get_logger().info("Converting map to pixel coordinates")
+        start = self.grid_to_map(start_point, resolution)
+        goal = self.grid_to_map(end_point, resolution)
 
+        self.get_logger().info("Start: {}".format(start))
+        self.get_logger().info("Goal: {}".format(goal))
         path = self.a_star(start, goal, self.downsampled_map)
         if path is None:
             self.get_logger().info("No path found")
@@ -108,31 +132,66 @@ class PathPlan(Node):
         self.get_logger().info("Path length: {}".format(len(path)))
         self.get_logger().info("Path: {}".format(path))
         for point in path:
-            self.trajectory.addPoint(self.grid_to_map(point, map_info))
-            
+            self.trajectory.addPoint(self.map_to_grid(point, resolution))
+
+        end_time = self.get_clock().now()
+        elapsed_time = (end_time - start_time).nanoseconds / 1e9
+        self.get_logger().info("Path planning took {} seconds".format(elapsed_time))
         self.traj_pub.publish(self.trajectory.toPoseArray())
         self.trajectory.publish_viz()
 
 
     # HELPER FUNCTIONS
     def is_valid(self, position):
-        return  0 <= position[0] < self.DOWNSAMPLED_ROWS and 0 <= position[1] < self.DOWNSAMPLED_COLS
-
-    def is_obstacle(self, grid, position):
-        return not grid[position[0]][position[1]] == 0
+        in_bounds = (0 <= position[0] < self.DOWNSAMPLED_ROWS and 0 <= position[1] < self.DOWNSAMPLED_COLS)
+        is_obstacle = (self.downsampled_map[position[0]][position[1]] == 1)
+        return in_bounds and not is_obstacle
     
     def is_goal(self, position, goal):
         return position == goal
+
+    def map_to_grid(self, pos, resolution):
+        # modify when using downsampling
+        x = float(pos[0]) * resolution
+        y = float(pos[1]) * resolution
+        x_, y_, _ = self.compose_transforms(self.origin, (x, y, 0))
+        return (x_, y_)
+
+    def grid_to_map(self, pos, resolution):
+        # modify when using downsampling
+        x_pixel, y_pixel, _ = self.compose_transforms(self.compose_transforms(self.origin, (0,0,0)), (pos[0], pos[1], 0))
+        return (int(x_pixel//resolution), int(y_pixel//resolution))
     
-    def map_to_grid(self, pos, map_info):
-        grid_x = int((pos[0] - map_info.origin.position.x) / map_info.resolution)
-        grid_y = int((pos[1] - map_info.origin.position.y) / map_info.resolution)
-        return (grid_x, grid_y)
+    def compose_transforms(self, t1, t2):
+        t1_dx, t1_dy, t1_dtheta = t1
+        t2_dx, t2_dy, t2_dtheta = t2
+        t_dx = t1_dx+np.cos(t1_dtheta)*t2_dx-np.sin(t1_dtheta)*t2_dy
+        t_dy = t1_dy+np.sin(t1_dtheta)*t2_dx+np.cos(t1_dtheta)*t2_dy
+        t_dtheta = t1_dtheta+t2_dtheta
+        return (t_dx, t_dy, t_dtheta)
     
-    def grid_to_map(self, grid_pos, map_info):
-        x = grid_pos[0] * map_info.resolution + map_info.origin.position.x + map_info.resolution / 2.0
-        y = grid_pos[1] * map_info.resolution + map_info.origin.position.y + map_info.resolution / 2.0
-        return (x, y)
+    def euler_from_quaternion(self, quat):
+        """
+        Convert a quaternion into euler angles (roll, pitch, yaw)
+        roll is rotation around x in radians (counterclockwise)
+        pitch is rotation around y in radians (counterclockwise)
+        yaw is rotation around z in radians (counterclockwise)
+        """
+        x, y, z, w = quat.x, quat.y, quat.z, quat.w
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll_x = math.atan2(t0, t1)
+     
+        t2 = +2.0 * (w * y - z * x)
+        t2 = +1.0 if t2 > +1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch_y = math.asin(t2)
+     
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = math.atan2(t3, t4)
+     
+        return roll_x, pitch_y, yaw_z # in radians
     
     def heuristic(self, start, goal):
         # euclidean distance
@@ -146,10 +205,13 @@ class PathPlan(Node):
         came_from = {}
         g_score = {start: 0}
         f_score = {start: self.heuristic(start, goal)}
+        steps = 0
 
         while open_list:
+            steps += 1
             _, current = heapq.heappop(open_list)
             if self.is_goal(current, goal):
+                self.get_logger().info("Goal found")
                 # reconstruct path
                 path = []
                 while current in came_from:
@@ -161,7 +223,7 @@ class PathPlan(Node):
             
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
                 neighbor = (current[0] + dx, current[1] + dy)
-                if not self.is_valid(neighbor) or self.is_obstacle(grid, neighbor):
+                if not self.is_valid(neighbor):
                     continue
 
                 tentative_g_score = g_score[current] + self.heuristic(current, neighbor)

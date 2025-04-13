@@ -66,8 +66,9 @@ class PurePursuit(Node):
         self.lookahead_pub = self.create_publisher(Marker, "/lookahead_pt", 1)
 
 
-    def init_callback(self, init_msg):
-        self.initialized_pose = True
+    # def init_callback(self, init_msg):
+    #     2
+    #     # self.initialized_pose = True
 
     def pose_callback(self, estimated_robot_msg):
         orientation = euler_from_quaternion([
@@ -83,7 +84,8 @@ class PurePursuit(Node):
             orientation
         ])
 
-        if self.initialized_traj and self.initialized_pose:
+        # if self.initialized_traj and self.initialized_pose:
+        if self.initialized_traj:
             # self.get_logger().info(f'in the loop')
 
             # FINDING CLOSEST SEGMENT
@@ -216,6 +218,7 @@ class PurePursuit(Node):
         self.trajectory.publish_viz(duration=0.0)
 
         self.initialized_traj = True
+
 
     def fake_callback(self, extra):
        return

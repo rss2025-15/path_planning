@@ -380,9 +380,12 @@ class PathPlan(Node):
         self.start_id = self.add_node(start_point, 0)
         i = 0
         while (i < self.num_iters or self.goal_idx is None):
+            pose_sample = self.pose_sampler(start_point,i)
+            x, y, _ = pose_sample
+            if self.taken(x,y):
+                continue
             i+=1
             # self.get_logger().info(f'ITERATION {i}')
-            pose_sample = self.pose_sampler(start_point,i)
             new_idx = self.extend_tree(pose_sample)
             if new_idx is None:
                 continue
@@ -429,7 +432,7 @@ class PathPlan(Node):
         # Shortcutting to make paths more straightforward (include discretization if needed)
         for i in range(self.shortcutting_iters):
             u = math.floor(random.random()*len(self.path))
-            v = math.floor(random.random()*(len(self.path)-1))
+            v = u + math.floor(random.random()*(len(self.path)-1-u))
             start_pose = self.path[u]
             end_pose = self.path[v]
             path = dubins.shortest_path(start_pose, end_pose, self.min_turn_radius)

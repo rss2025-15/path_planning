@@ -11,14 +11,14 @@ trajectory_planner:
     neighbor_type: "num" # num or radius
     neighbor_num: 10
     neighbor_radius: 2.0
-    num_iters: 500
+    num_iters: 100
     dist_limit: True
     discretize_path_progress: True
     progress_discretization_dist: 0.5
     discretize_path_publish: True
     publish_discretization_dist: 0.5
     check_discretization_dist: 0.1
-    shortcutting_iters: 100
+    shortcutting_iters: 1000
 trajectory_follower:
   ros__parameters:
     odom_topic: "/odom"

@@ -10,6 +10,9 @@ import heapq
 import math
 import cv2 
 import imageio
+import sys
+
+np.set_printoptions(threshold=sys.maxsize)
 
 class PathPlan(Node):
     """ Listens for goal pose published by RViz and uses it to plan a path from
@@ -68,13 +71,15 @@ class PathPlan(Node):
         self.DOWNSAMPLED_ROWS = None
         self.DOWNSAMPLED_COLS = None
         self.pos = (0, 0)
-        self.dilation = 10
+        self.dilation = 25
+        self.map_initialized = False
 
 
         self.get_logger().info("Trajectory planner node started")
 
 
     def map_cb(self, msg):
+        self.map_initialized = True
         self.map = msg
         self.ROWS = msg.info.height
         self.COLS = msg.info.width
@@ -82,9 +87,10 @@ class PathPlan(Node):
         self.origin = (msg.info.origin.position.x, msg.info.origin.position.y, self.euler_from_quaternion(msg.info.origin.orientation)[2])
         self.get_logger().info("Map size: {} x {}".format(self.ROWS, self.COLS))
 
-
         g = np.transpose(np.reshape(msg.data, (self.ROWS, self.COLS)))
-        self.map = np.where(g == -1, 1, g)
+        g = np.where(g == -1, 1, g)
+        self.map = np.where(g == 100, 1, g)
+        self.get_logger().info(f"map: {self.map}")
         self.map = cv2.dilate(self.map.astype('uint8'), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.dilation, self.dilation)))
         # map_info = np.array(msg.data).reshape((self.ROWS, self.COLS)) # reshape flattened array
         # map_info = cv2.dilate(map_info.astype('uint8'), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.dilation, self.dilation)))
@@ -95,7 +101,6 @@ class PathPlan(Node):
         self.DOWNSAMPLED_COLS = self.downsampled_map.shape[1]
         self.get_logger().info("Downsampled map size: {} x {}".format(self.DOWNSAMPLED_ROWS, self.DOWNSAMPLED_COLS))
         self.get_logger().info("Map received")
-        imageio.imwrite("./src/path_planning/map.png", self.downsampled_map)
 
     def pose_cb(self, pose):
         self.pos = (pose.pose.pose.position.x, pose.pose.pose.position.y)
@@ -105,19 +110,22 @@ class PathPlan(Node):
     def goal_cb(self, msg):
         self.goal = (msg.pose.position.x, msg.pose.position.y)
         self.get_logger().info("Goal received")
-        self.plan_path(self.pos, (msg.pose.position.x, msg.pose.position.y), self.map)
+        # imageio.imwrite("./src/path_planning/map.png", self.downsampled_map)
+        self.plan_path(self.pos, (msg.pose.position.x, msg.pose.position.y), self.downsampled_map)
 
     def plan_path(self, start_point, end_point, map):
         start_time = self.get_clock().now()
         resolution = self.RES
-        self.get_logger().info("Planning path from {} to {}".format(start_point, end_point))
-
-        if resolution == 0.0:
+        
+        if not self.map_initialized:
             self.get_logger().warn("Map resolution is 0, waiting for valid map")
             return
 
         # convert map to pixel coordinates
         self.get_logger().info("Converting map to pixel coordinates")
+        self.get_logger().info("Planning path from {} to {}".format(start_point, end_point))
+        self.get_logger().info(f"Origin: {self.origin}")
+
         start = self.grid_to_map(start_point, resolution)
         goal = self.grid_to_map(end_point, resolution)
 
@@ -144,7 +152,7 @@ class PathPlan(Node):
     # HELPER FUNCTIONS
     def is_valid(self, position):
         in_bounds = (0 <= position[0] < self.DOWNSAMPLED_ROWS and 0 <= position[1] < self.DOWNSAMPLED_COLS)
-        is_obstacle = (self.downsampled_map[position[0]][position[1]] == 1)
+        is_obstacle = (self.downsampled_map[position[0]][position[1]] == 1 or self.downsampled_map[position[0]][position[1]] == -1)
         return in_bounds and not is_obstacle
     
     def is_goal(self, position, goal):
@@ -154,13 +162,21 @@ class PathPlan(Node):
         # modify when using downsampling
         x = float(pos[0]) * resolution
         y = float(pos[1]) * resolution
-        x_, y_, _ = self.compose_transforms(self.origin, (x, y, 0))
+        x_, y_, _ = self.compose_transforms(self.compute_transform_from_to(self.origin, (0,0,0)), (x, y, 0))
         return (x_, y_)
 
     def grid_to_map(self, pos, resolution):
         # modify when using downsampling
-        x_pixel, y_pixel, _ = self.compose_transforms(self.compose_transforms(self.origin, (0,0,0)), (pos[0], pos[1], 0))
+        x_pixel, y_pixel, _ = self.compose_transforms(self.origin, (pos[0], pos[1], 0))
         return (int(x_pixel//resolution), int(y_pixel//resolution))
+    
+    def compute_transform_from_to(self, from_pos, to_pos):
+        from_x, from_y, from_theta = from_pos
+        to_x, to_y, to_theta = to_pos
+        dx = np.cos(from_theta)*(to_x-from_x)+np.sin(from_theta)*(to_y-from_y)
+        dy = -np.sin(from_theta)*(to_x-from_x)+np.cos(from_theta)*(to_y-from_y)
+        dtheta = to_theta - from_theta
+        return (dx, dy, dtheta)
     
     def compose_transforms(self, t1, t2):
         t1_dx, t1_dy, t1_dtheta = t1
@@ -196,6 +212,23 @@ class PathPlan(Node):
     def heuristic(self, start, goal):
         # euclidean distance
         return np.linalg.norm(np.array(start) - np.array(goal))
+    
+    # def heuristic(self, start, goal):
+    #     base_cost = np.linalg.norm(np.array(start) - np.array(goal))
+
+    #     # Penalize based on distance to nearest obstacle in a window
+    #     penalty = 0
+    #     search_radius = 2  # how far around the current cell to look
+    #     for dx in range(-search_radius, search_radius + 1):
+    #         for dy in range(-search_radius, search_radius + 1):
+    #             nx, ny = start[0] + dx, start[1] + dy
+    #             if 0 <= nx < self.DOWNSAMPLED_ROWS and 0 <= ny < self.DOWNSAMPLED_COLS:
+    #                 if self.downsampled_map[nx][ny] == 1:
+    #                     penalty += 1  # or: penalty += 1 / (1 + np.linalg.norm([dx, dy]))
+
+    #     # Scale penalty
+    #     penalty_weight = 2.0
+    #     return base_cost + penalty_weight * penalty
     
     def a_star(self, start, goal, grid):
         """everything in grid coordinates"""

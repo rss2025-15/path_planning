@@ -32,7 +32,7 @@ setup(
             'trajectory_builder = path_planning.trajectory_builder:main',
             'trajectory_loader = path_planning.trajectory_loader:main',
             # 'trajectory_planner = path_planning.trajectory_planner:main',
-            'trajectory_follower = path_planning.trajectory_follower:main'
+            'trajectory_follower = path_planning.trajectory_follower:main',
             'trajectory_planner_astar = path_planning.trajectory_planner_astar:main',
             'trajectory_planner_rrt = path_planning.trajectory_planner_rrt:main',
         ],

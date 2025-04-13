@@ -5,6 +5,6 @@
                <!-- second custom trajectory -->
                 <!-- /home/racecar/lab6_trajectories/2025-04-13-04-38-08.traj -->
                 <!-- <param name="trajectory" value="$HOME/lab6_trajectories/2025-04-13-04-38-08.traj"/> -->
-        <param name="trajectory" value="$(find-pkg-share path_planning)/example_trajectories/trajectory_2.traj"/>
+        <param name="trajectory" value="$(find-pkg-share path_planning)/example_trajectories/trajectory_3.traj"/>
     </node>
 </launch>

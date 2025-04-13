@@ -8,8 +8,8 @@ from .utils import LineTrajectory
 import numpy as np
 import heapq
 import math
-import cv2 
-import imageio
+import cv2
+# import imageio
 import sys
 
 np.set_printoptions(threshold=sys.maxsize)
@@ -116,7 +116,7 @@ class PathPlan(Node):
     def plan_path(self, start_point, end_point, map):
         start_time = self.get_clock().now()
         resolution = self.RES
-        
+
         if not self.map_initialized:
             self.get_logger().warn("Map resolution is 0, waiting for valid map")
             return
@@ -135,7 +135,7 @@ class PathPlan(Node):
         if path is None:
             self.get_logger().info("No path found")
             return
-        
+
         self.get_logger().info("Path found")
         self.get_logger().info("Path length: {}".format(len(path)))
         self.get_logger().info("Path: {}".format(path))
@@ -154,7 +154,7 @@ class PathPlan(Node):
         in_bounds = (0 <= position[0] < self.DOWNSAMPLED_ROWS and 0 <= position[1] < self.DOWNSAMPLED_COLS)
         is_obstacle = (self.downsampled_map[position[0]][position[1]] == 1 or self.downsampled_map[position[0]][position[1]] == -1)
         return in_bounds and not is_obstacle
-    
+
     def is_goal(self, position, goal):
         return position == goal
 
@@ -169,7 +169,7 @@ class PathPlan(Node):
         # modify when using downsampling
         x_pixel, y_pixel, _ = self.compose_transforms(self.origin, (pos[0], pos[1], 0))
         return (int(x_pixel//resolution), int(y_pixel//resolution))
-    
+
     def compute_transform_from_to(self, from_pos, to_pos):
         from_x, from_y, from_theta = from_pos
         to_x, to_y, to_theta = to_pos
@@ -177,7 +177,7 @@ class PathPlan(Node):
         dy = -np.sin(from_theta)*(to_x-from_x)+np.cos(from_theta)*(to_y-from_y)
         dtheta = to_theta - from_theta
         return (dx, dy, dtheta)
-    
+
     def compose_transforms(self, t1, t2):
         t1_dx, t1_dy, t1_dtheta = t1
         t2_dx, t2_dy, t2_dtheta = t2
@@ -185,7 +185,7 @@ class PathPlan(Node):
         t_dy = t1_dy+np.sin(t1_dtheta)*t2_dx+np.cos(t1_dtheta)*t2_dy
         t_dtheta = t1_dtheta+t2_dtheta
         return (t_dx, t_dy, t_dtheta)
-    
+
     def euler_from_quaternion(self, quat):
         """
         Convert a quaternion into euler angles (roll, pitch, yaw)
@@ -197,22 +197,22 @@ class PathPlan(Node):
         t0 = +2.0 * (w * x + y * z)
         t1 = +1.0 - 2.0 * (x * x + y * y)
         roll_x = math.atan2(t0, t1)
-     
+
         t2 = +2.0 * (w * y - z * x)
         t2 = +1.0 if t2 > +1.0 else t2
         t2 = -1.0 if t2 < -1.0 else t2
         pitch_y = math.asin(t2)
-     
+
         t3 = +2.0 * (w * z + x * y)
         t4 = +1.0 - 2.0 * (y * y + z * z)
         yaw_z = math.atan2(t3, t4)
-     
+
         return roll_x, pitch_y, yaw_z # in radians
-    
+
     def heuristic(self, start, goal):
         # euclidean distance
         return np.linalg.norm(np.array(start) - np.array(goal))
-    
+
     # def heuristic(self, start, goal):
     #     base_cost = np.linalg.norm(np.array(start) - np.array(goal))
 
@@ -229,7 +229,7 @@ class PathPlan(Node):
     #     # Scale penalty
     #     penalty_weight = 2.0
     #     return base_cost + penalty_weight * penalty
-    
+
     def a_star(self, start, goal, grid):
         """everything in grid coordinates"""
         self.get_logger().info("A* path planning")
@@ -253,7 +253,7 @@ class PathPlan(Node):
                 path.append(start)
                 path.reverse()
                 return path # includes start node
-            
+
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
                 neighbor = (current[0] + dx, current[1] + dy)
                 if not self.is_valid(neighbor):

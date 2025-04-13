@@ -43,7 +43,7 @@ class PurePursuit(Node):
                                                1)
 
         self.initialized_pose = False
-        self.init_sub = self.create_subscription(PoseWithCovarianceStamped, "/initialpose", self.init_callback, 1)
+        # self.init_sub = self.create_subscription(PoseWithCovarianceStamped, "/initialpose", self.init_callback, 1)
 
         #This estimated pose is gonna come from the localization lab
         self.estimated_robot_sub = self.create_subscription(PoseStamped, '/estimated_robot', self.pose_callback, 1)
@@ -64,7 +64,7 @@ class PurePursuit(Node):
                                                  1)
 
         self.lookahead_pub = self.create_publisher(Marker, "/lookahead_pt", 1)
-
+        self.reached_end = False
 
     # def init_callback(self, init_msg):
     #     2
@@ -115,10 +115,12 @@ class PurePursuit(Node):
             lookahead_angle = None
             segments_checked = 0
             too_far = True
-            self.get_logger().info(f"dist_to_segments {dist_to_segments}")
+            # self.get_logger().info(f"dist_to_segments {dist_to_segments}")
             while lookahead_angle is None and segments_checked < len(self.trajectory.points)-1:
-
+                #for no assignment error
+                angle_in_robot_frame = 0.0
                 i = np.argmin(dist_to_segments) # closest segment currently
+
                 segments_checked += 1
                 # self.get_logger().info(f"distance to the shortest segment was {dist_to_segments[i]}")
                 s_2 = np.array(self.trajectory.points[i+1])
@@ -155,6 +157,13 @@ class PurePursuit(Node):
 
                 pts = s_1 + forward_t*(segment_v)
 
+                # if i == len(self.trajectory.points)-2:
+                dist_to_end = np.linalg.norm([self.trajectory.points[-1][0] - robot_pose[0], self.trajectory.points[-1][1] - robot_pose[1]])
+                self.get_logger().info(f'distance to end is {dist_to_end}')
+                if dist_to_end < 1:
+                    self.reached_end = True
+
+
 
                 #lets find look ahead angle
                 #this angle is in the world frame
@@ -164,20 +173,25 @@ class PurePursuit(Node):
                 robot_angle_in_degrees = robot_pose[2]*180/math.pi
                 angle_in_robot_frame = self.relative_angle_rad(lookahead_angle, robot_pose[2])
                 angle_in_robot_frame_degrees = angle_in_robot_frame * 180/math.pi
-                self.get_logger().info(f"current look ahead is fixed to {lookahead_angle_in_degrees} degrees")
-                self.get_logger().info(f"current the robot is headed to {robot_angle_in_degrees} degrees")
-                self.get_logger().info(f"The angle of the point in robot's frame is {angle_in_robot_frame_degrees} degrees")
+                # self.get_logger().info(f"current look ahead is fixed to {lookahead_angle_in_degrees} degrees")
+                # self.get_logger().info(f"current the robot is headed to {robot_angle_in_degrees} degrees")
+                # self.get_logger().info(f"The angle of the point in robot's frame is {angle_in_robot_frame_degrees} degrees")
 
 
             # # ACTUAL PURE PURSUIT
             # self.get_logger().info(f"lookahead angle{lookahead_angle}")
             self.get_logger().info(f"too far parameter is set to {too_far}")
-            turn_radius = self.lookahead / (2*math.sin(angle_in_robot_frame)) if not too_far else 0.
+            if math.sin(angle_in_robot_frame) == 0:
+                turn_radius = 1000
+            else:
+                turn_radius = self.lookahead / (2*math.sin(angle_in_robot_frame)) if not too_far else 0.
             steer_angle = math.atan(self.wheelbase_length/turn_radius) if not too_far else 0.
             # self.cmd_speed = max(1.0-math.exp(-self.exp_speed_coeff*(lookahead-self.parking_distance)),self.close_speed) # this is from panos code
 
             self.get_logger().info(f"currently the car is being steered at the steering angle {steer_angle}")
-            self.cmd_speed = 1.0
+            self.get_logger().info(f"reached end parameter is set to {self.reached_end}")
+
+            self.cmd_speed = 1.0 if not self.reached_end else 0.0
             self.drive_cmd(steer_angle, self.cmd_speed)
 
 

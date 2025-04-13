@@ -2,6 +2,7 @@ import rclpy
 from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped, PoseStamped
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Header
 from rclpy.node import Node
 from visualization_msgs.msg import Marker
 
@@ -11,6 +12,7 @@ from .utils import LineTrajectory
 
 import numpy as np
 import math
+import rclpy
 
 
 class PurePursuit(Node):
@@ -60,6 +62,8 @@ class PurePursuit(Node):
                                                  "/loaded_trajectory/end_pose",
                                                  self.fake_callback,
                                                  1)
+
+        self.lookahead_pub = self.create_publisher(Marker, "/lookahead_pt", 1)
 
 
     def init_callback(self, init_msg):

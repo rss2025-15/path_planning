@@ -25,12 +25,9 @@ class PathPlan(Node):
         self.declare_parameter('map_topic', "default")
         self.declare_parameter('initial_pose_topic', "default")
 
-        # self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
-        # self.map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
-        # self.initial_pose_topic = self.get_parameter('initial_pose_topic').get_parameter_value().string_value
-        self.odom_topic = "/odom"
-        self.map_topic = "/map"
-        self.initial_pose_topic = "/initialpose"
+        self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
+        self.map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
+        self.initial_pose_topic = self.get_parameter('initial_pose_topic').get_parameter_value().string_value
 
         self.map_sub = self.create_subscription(
             OccupancyGrid,
@@ -74,7 +71,6 @@ class PathPlan(Node):
         self.dilation = 25
         self.map_initialized = False
 
-
         self.get_logger().info("Trajectory planner node started")
 
 
@@ -88,13 +84,9 @@ class PathPlan(Node):
         self.get_logger().info("Map size: {} x {}".format(self.ROWS, self.COLS))
 
         g = np.transpose(np.reshape(msg.data, (self.ROWS, self.COLS)))
-        g = np.where(g == -1, 1, g)
-        self.map = np.where(g == 100, 1, g)
+        self.map = np.where(np.logical_or(g == -1, g == 100), 1, g)
         self.get_logger().info(f"map: {self.map}")
         self.map = cv2.dilate(self.map.astype('uint8'), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.dilation, self.dilation)))
-        # map_info = np.array(msg.data).reshape((self.ROWS, self.COLS)) # reshape flattened array
-        # map_info = cv2.dilate(map_info.astype('uint8'), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.dilation, self.dilation)))
-        # self.map_data = map_info
 
         self.downsampled_map = self.map[::self.downsampling_factor, ::self.downsampling_factor]
         self.DOWNSAMPLED_ROWS = self.downsampled_map.shape[0]
@@ -105,7 +97,6 @@ class PathPlan(Node):
     def pose_cb(self, pose):
         self.pos = (pose.pose.pose.position.x, pose.pose.pose.position.y)
         self.get_logger().info("Pose received")
-        # self.trajectory.clear()
 
     def goal_cb(self, msg):
         self.goal = (msg.pose.position.x, msg.pose.position.y)
@@ -118,7 +109,7 @@ class PathPlan(Node):
         resolution = self.RES
         
         if not self.map_initialized:
-            self.get_logger().warn("Map resolution is 0, waiting for valid map")
+            self.get_logger().warn("waiting for valid map")
             return
 
         # convert map to pixel coordinates
@@ -212,23 +203,6 @@ class PathPlan(Node):
     def heuristic(self, start, goal):
         # euclidean distance
         return np.linalg.norm(np.array(start) - np.array(goal))
-    
-    # def heuristic(self, start, goal):
-    #     base_cost = np.linalg.norm(np.array(start) - np.array(goal))
-
-    #     # Penalize based on distance to nearest obstacle in a window
-    #     penalty = 0
-    #     search_radius = 2  # how far around the current cell to look
-    #     for dx in range(-search_radius, search_radius + 1):
-    #         for dy in range(-search_radius, search_radius + 1):
-    #             nx, ny = start[0] + dx, start[1] + dy
-    #             if 0 <= nx < self.DOWNSAMPLED_ROWS and 0 <= ny < self.DOWNSAMPLED_COLS:
-    #                 if self.downsampled_map[nx][ny] == 1:
-    #                     penalty += 1  # or: penalty += 1 / (1 + np.linalg.norm([dx, dy]))
-
-    #     # Scale penalty
-    #     penalty_weight = 2.0
-    #     return base_cost + penalty_weight * penalty
     
     def a_star(self, start, goal, grid):
         """everything in grid coordinates"""

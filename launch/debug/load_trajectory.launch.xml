@@ -1,6 +1,10 @@
 <launch>
     <node pkg="path_planning" exec="trajectory_loader" name="trajectory_loader">
-        <!--        <param name="trajectory" value="$HOME/lab6_trajectories/example.traj"/>-->
-        <param name="trajectory" value="$(find-pkg-share path_planning)/example_trajectories/trajectory_2.traj"/>
+                <!-- first custom trajectory -->
+               <!-- <param name="trajectory" value="$HOME/lab6_trajectories/2025-04-13-03-49-26.traj"/> -->
+               <!-- second custom trajectory -->
+                <!-- /home/racecar/lab6_trajectories/2025-04-13-04-38-08.traj -->
+                <!-- <param name="trajectory" value="$HOME/lab6_trajectories/2025-04-13-04-38-08.traj"/> -->
+        <param name="trajectory" value="$(find-pkg-share path_planning)/example_trajectories/trajectory_3.traj"/>
     </node>
 </launch>

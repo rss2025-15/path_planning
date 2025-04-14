@@ -157,11 +157,11 @@ class PurePursuit(Node):
 
                 pts = s_1 + forward_t*(segment_v)
 
-                # if i == len(self.trajectory.points)-2:
-                dist_to_end = np.linalg.norm([self.trajectory.points[-1][0] - robot_pose[0], self.trajectory.points[-1][1] - robot_pose[1]])
-                self.get_logger().info(f'distance to end is {dist_to_end}')
-                if dist_to_end < 1:
-                    self.reached_end = True
+                # # if i == len(self.trajectory.points)-2:
+                # dist_to_end = np.linalg.norm([self.trajectory.points[-1][0] - robot_pose[0], self.trajectory.points[-1][1] - robot_pose[1]])
+                # self.get_logger().info(f'distance to end is {dist_to_end}')
+                # if dist_to_end < 1:
+                #     self.reached_end = True
 
 
 
@@ -189,9 +189,11 @@ class PurePursuit(Node):
             # self.cmd_speed = max(1.0-math.exp(-self.exp_speed_coeff*(lookahead-self.parking_distance)),self.close_speed) # this is from panos code
 
             self.get_logger().info(f"currently the car is being steered at the steering angle {steer_angle}")
-            self.get_logger().info(f"reached end parameter is set to {self.reached_end}")
+            # self.get_logger().info(f"reached end parameter is set to {self.reached_end}")
 
-            self.cmd_speed = 1.0 if not self.reached_end else 0.0
+            dist_to_end = np.linalg.norm([self.trajectory.points[-1][0] - robot_pose[0], self.trajectory.points[-1][1] - robot_pose[1]])
+            self.cmd_speed = 1.0 if dist_to_end > 1 else 0.0
+
             self.drive_cmd(steer_angle, self.cmd_speed)
 
 

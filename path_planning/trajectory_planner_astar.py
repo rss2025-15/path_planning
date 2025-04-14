@@ -3,7 +3,7 @@ from rclpy.node import Node
 
 assert rclpy
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, PoseArray
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Odometry
 from .utils import LineTrajectory
 import numpy as np
 import heapq
@@ -24,13 +24,15 @@ class PathPlan(Node):
         self.declare_parameter('odom_topic', "default")
         self.declare_parameter('map_topic', "default")
         self.declare_parameter('initial_pose_topic', "default")
+        self.declare_parameter('pose_estimate_topic', "default")
 
-        # self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
-        # self.map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
-        # self.initial_pose_topic = self.get_parameter('initial_pose_topic').get_parameter_value().string_value
-        self.odom_topic = "/odom"
-        self.map_topic = "/map"
-        self.initial_pose_topic = "/initialpose"
+        self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
+        self.map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
+        self.initial_pose_topic = self.get_parameter('initial_pose_topic').get_parameter_value().string_value
+        self.pose_estimate_topic = self.get_parameter('pose_estimate_topic').get_parameter_value().string_value
+        # self.odom_topic = "/odom"
+        # self.map_topic = "/map"
+        # self.initial_pose_topic = "/initialpose"
 
         self.map_sub = self.create_subscription(
             OccupancyGrid,
@@ -55,6 +57,13 @@ class PathPlan(Node):
             PoseWithCovarianceStamped,
             self.initial_pose_topic,
             self.pose_cb,
+            10
+        )
+
+        self.localize_sub = self.create_subscription(
+            Odometry,
+            self.pose_estimate_topic,
+            self.pose_estimate_cb,
             10
         )
 
@@ -104,6 +113,11 @@ class PathPlan(Node):
 
     def pose_cb(self, pose):
         self.pos = (pose.pose.pose.position.x, pose.pose.pose.position.y)
+        self.get_logger().info("Pose received")
+        # self.trajectory.clear()
+    
+    def pose_estimate_cb(self, odom):
+        self.pos = (odom.pose.pose.position.x, odom.pose.pose.position.y)
         self.get_logger().info("Pose received")
         # self.trajectory.clear()
 

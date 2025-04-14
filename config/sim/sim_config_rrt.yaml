@@ -3,6 +3,7 @@ trajectory_planner:
     odom_topic: "/odom"
     map_topic: "/map"
     scan_topic: "/scan"
+    pose_estimate_topic: "/pf/pose/odom"
     initial_pose_topic: "/initialpose"
     car_length: 0.45
     max_steer: 0.8

@@ -4,6 +4,7 @@ from rclpy.node import Node
 assert rclpy
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, PoseArray
 from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import Odometry
 from .utils import LineTrajectory
 import numpy as np
 from matplotlib import pyplot as plt
@@ -52,6 +53,7 @@ class PathPlan(Node):
         self.declare_parameter('odom_topic', "default")
         self.declare_parameter('map_topic', "default")
         self.declare_parameter('initial_pose_topic', "default")
+        self.declare_parameter('pose_estimate_topic', "default")
         self.declare_parameter('car_length', 1.0)
         self.declare_parameter('max_steer', 0.8)
         self.declare_parameter('dilate_radius', 1)
@@ -72,6 +74,7 @@ class PathPlan(Node):
         self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
         self.map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
         self.initial_pose_topic = self.get_parameter('initial_pose_topic').get_parameter_value().string_value
+        self.pose_estimate_topic = self.get_parameter('pose_estimate_topic').get_parameter_value().string_value
         self.car_length = self.get_parameter('car_length').get_parameter_value().double_value
         self.max_steer = self.get_parameter('max_steer').get_parameter_value().double_value
         self.dilate_radius = self.get_parameter('dilate_radius').get_parameter_value().integer_value
@@ -115,6 +118,13 @@ class PathPlan(Node):
             PoseWithCovarianceStamped,
             self.initial_pose_topic,
             self.pose_cb,
+            10
+        )
+        
+        self.localize_sub = self.create_subscription(
+            Odometry,
+            self.pose_estimate_topic,
+            self.pose_estimate_cb,
             10
         )
 
@@ -182,7 +192,12 @@ class PathPlan(Node):
     def pose_cb(self, pose):
         self.init_pose = (pose.pose.pose.position.x, pose.pose.pose.position.y, euler_from_quaternion(pose.pose.pose.orientation)[2])
         self.get_logger().info(f'INITIAL POSE: {self.init_pose}')
-        self.clear_rrt()
+        # self.clear_rrt()
+
+    def pose_estimate_cb(self, odom):
+        self.init_pose = (odom.pose.pose.position.x, odom.pose.pose.position.y, euler_from_quaternion(odom.pose.pose.orientation)[2])
+        self.get_logger().info(f'INITIAL POSE: {self.init_pose}')
+        # self.clear_rrt()
 
     def goal_cb(self, msg):
         self.goal = (msg.pose.position.x, msg.pose.position.y, euler_from_quaternion(msg.pose.orientation)[2])

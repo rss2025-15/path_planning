@@ -3,7 +3,7 @@
         <param from="$(find-pkg-share path_planning)/config/sim/sim_config.yaml"/>
     </node>
     <!-- <node pkg="path_planning" exec="trajectory_planner_rrt" name="trajectory_planner_rrt" output="screen">
-        <param from="$(find-pkg-share path_planning)/config/sim/sim_config_rrt.yaml"/>
+        <param from="$(find-pkg-share path_planning)/config/sim/sim_config.yaml"/>
     </node> -->
     <node pkg="path_planning" exec="trajectory_follower" name="trajectory_follower">
         <param from="$(find-pkg-share path_planning)/config/sim/pf_sim_config.yaml"/>

@@ -14,6 +14,8 @@ import numpy as np
 import math
 import rclpy
 
+import csv
+
 
 class PurePursuit(Node):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
@@ -109,6 +111,12 @@ class PurePursuit(Node):
                     hehe = np.array([s_1[0] + t*(s_2[0] - s_1[0]), s_1[1] + t*(s_2[1] - s_1[1])])
                     dist_to_segments[i] = np.linalg.norm([hehe[0] - robot_pose[0], hehe[1] - robot_pose[1]])
                     # self.get_logger().info(f'published a distance of {np.linalg.norm([hehe[0] - robot_pose[0], hehe[1] - robot_pose[1]])}')
+            
+            # save errors from segments
+            with open('/home/racecar/racecar_ws/src/path_planning/ctrl_error.csv', 'a', newline='') as csvfile:
+                csv_writer = csv.writer(csvfile)
+                csv_writer.writerow([self.get_clock().now().nanoseconds*1e-9, min(dist_to_segments)])
+            
 
             # CHOOSING SEGMENT THAT FALLS ON LOOKAHEAD
             # https://codereview.stackexchange.com/questions/86421/line-segment-to-circle-collision-algorithm/86428#86428

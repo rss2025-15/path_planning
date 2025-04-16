@@ -61,14 +61,14 @@ class PathPlan(Node):
         self.map_data = None
         self.origin = None
         self.downsampled_map = None
-        self.downsampling_factor = 1
+        self.downsampling_factor = 10
         self.ROWS = None
         self.COLS = None
         self.RES = None
         self.DOWNSAMPLED_ROWS = None
         self.DOWNSAMPLED_COLS = None
         self.pos = (0, 0)
-        self.dilation = 25
+        self.dilation = 5
         self.map_initialized = False
 
         self.get_logger().info("Trajectory planner node started")
@@ -85,10 +85,11 @@ class PathPlan(Node):
 
         g = np.transpose(np.reshape(msg.data, (self.ROWS, self.COLS)))
         self.map = np.where(np.logical_or(g == -1, g == 100), 1, g)
-        self.get_logger().info(f"map: {self.map}")
+        # self.get_logger().info(f"map: {self.map}")
         self.map = cv2.dilate(self.map.astype('uint8'), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.dilation, self.dilation)))
 
-        self.downsampled_map = self.map[::self.downsampling_factor, ::self.downsampling_factor]
+        # self.downsampled_map = self.map[::self.downsampling_factor, ::self.downsampling_factor]
+        self.downsampled_map = self.maxpool2d(self.map, self.downsampling_factor)
         self.DOWNSAMPLED_ROWS = self.downsampled_map.shape[0]
         self.DOWNSAMPLED_COLS = self.downsampled_map.shape[1]
         self.get_logger().info("Downsampled map size: {} x {}".format(self.DOWNSAMPLED_ROWS, self.DOWNSAMPLED_COLS))
@@ -141,6 +142,36 @@ class PathPlan(Node):
 
 
     # HELPER FUNCTIONS
+
+    def maxpool2d(self, array, pool_size):
+        """
+        Downsample a 2D array using max pooling with the specified kernel size.
+
+        Parameters
+        ----------
+        array : numpy.ndarray
+            The input 2D array.
+        pool_size : int
+            The size of the 2D kernel (e.g., 2 for 2x2 pooling).
+
+        Returns
+        -------
+        numpy.ndarray
+            The downsampled array with the max values in each pooling window.
+        """
+        h, w = array.shape
+        # Ensure the array dimensions are multiples of pool_size
+        new_h, new_w = h // pool_size, w // pool_size
+
+        # Trim the array to be evenly divisible by pool_size
+        array = array[:new_h * pool_size, :new_w * pool_size]
+
+        # Reshape, then take maximum along both pooling dimensions
+        reshaped = array.reshape(new_h, pool_size, new_w, pool_size)
+        pooled = reshaped.max(axis=(1, 3))
+
+        return pooled
+
     def is_valid(self, position):
         in_bounds = (0 <= position[0] < self.DOWNSAMPLED_ROWS and 0 <= position[1] < self.DOWNSAMPLED_COLS)
         is_obstacle = (self.downsampled_map[position[0]][position[1]] == 1 or self.downsampled_map[position[0]][position[1]] == -1)
@@ -151,15 +182,15 @@ class PathPlan(Node):
 
     def map_to_grid(self, pos, resolution):
         # modify when using downsampling
-        x = float(pos[0]) * resolution
-        y = float(pos[1]) * resolution
+        x = float(pos[0]) * resolution * self.downsampling_factor
+        y = float(pos[1]) * resolution * self.downsampling_factor
         x_, y_, _ = self.compose_transforms(self.compute_transform_from_to(self.origin, (0,0,0)), (x, y, 0))
         return (x_, y_)
 
     def grid_to_map(self, pos, resolution):
         # modify when using downsampling
         x_pixel, y_pixel, _ = self.compose_transforms(self.origin, (pos[0], pos[1], 0))
-        return (int(x_pixel//resolution), int(y_pixel//resolution))
+        return (int(x_pixel//(resolution * self.downsampling_factor)), int(y_pixel//(resolution * self.downsampling_factor)))
     
     def compute_transform_from_to(self, from_pos, to_pos):
         from_x, from_y, from_theta = from_pos

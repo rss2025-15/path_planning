@@ -2,7 +2,7 @@ import rclpy
 from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped, PoseStamped
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Header
+from std_msgs.msg import Header, Float32
 from rclpy.node import Node
 from visualization_msgs.msg import Marker
 
@@ -13,6 +13,7 @@ from .utils import LineTrajectory
 import numpy as np
 import math
 import rclpy
+import csv
 
 
 class PurePursuit(Node):
@@ -27,8 +28,8 @@ class PurePursuit(Node):
         self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
         self.drive_topic = self.get_parameter('drive_topic').get_parameter_value().string_value
 
-        self.lookahead = 1.0  # FILL IN #
-        self.speed = 0.5  # FILL IN #
+        self.lookahead = 5.0  # FILL IN #
+        self.speed = 2.0  # FILL IN #
         self.wheelbase_length = .46  # FILL IN #
 
         self.trajectory = LineTrajectory("/followed_trajectory")
@@ -62,9 +63,13 @@ class PurePursuit(Node):
                                                  "/loaded_trajectory/end_pose",
                                                  self.fake_callback,
                                                  1)
+        self.dist_to_path_pub = self.create_publisher(Float32, '/dist_to_path', 1)
+        self.time_to_finish_pub = self.create_publisher(Float32, '/time_to_finish', 1)
+        self.total_path_length_pub = self.create_publisher(Float32, '/total_path_length', 1)
 
         self.lookahead_pub = self.create_publisher(Marker, "/lookahead_pt", 1)
         self.reached_end = False
+        self.kill_yourself = False
 
     # def init_callback(self, init_msg):
     #     2
@@ -83,6 +88,9 @@ class PurePursuit(Node):
             estimated_robot_msg.pose.position.y,
             orientation
         ])
+
+        if self.kill_yourself:
+            return
 
         # if self.initialized_traj and self.initialized_pose:
         if self.initialized_traj:
@@ -110,6 +118,14 @@ class PurePursuit(Node):
                     dist_to_segments[i] = np.linalg.norm([hehe[0] - robot_pose[0], hehe[1] - robot_pose[1]])
                     # self.get_logger().info(f'published a distance of {np.linalg.norm([hehe[0] - robot_pose[0], hehe[1] - robot_pose[1]])}')
 
+            dist_to_path_msg = Float32()
+            dist_to_path_msg.data = min(dist_to_segments)
+            self.dist_to_path_pub.publish(dist_to_path_msg)
+            
+            with open('ctrl_error.csv', 'a', newline='') as csvfile:
+                csv_writer = csv.writer(csvfile)
+                csv_writer.writerow([self.get_clock().now().nanoseconds*1e-9, min(dist_to_segments)])
+
             # CHOOSING SEGMENT THAT FALLS ON LOOKAHEAD
             # https://codereview.stackexchange.com/questions/86421/line-segment-to-circle-collision-algorithm/86428#86428
             lookahead_angle = None
@@ -130,6 +146,8 @@ class PurePursuit(Node):
                 # self.get_logger().info(f'the second point on trajectory was: {s_1}')
 
                 segment_v = s_2 - s_1
+                if np.all(segment_v == [0,0]):
+                    continue
 
                 # WE HAVE DECIDED WE NEED TO LOOK AT BOTH CLOSEST AND SECOND CLOSEST SEGMENTS!!!
 
@@ -158,10 +176,6 @@ class PurePursuit(Node):
                 pts = s_1 + forward_t*(segment_v)
 
                 # # if i == len(self.trajectory.points)-2:
-                # dist_to_end = np.linalg.norm([self.trajectory.points[-1][0] - robot_pose[0], self.trajectory.points[-1][1] - robot_pose[1]])
-                # self.get_logger().info(f'distance to end is {dist_to_end}')
-                # if dist_to_end < 1:
-                #     self.reached_end = True
 
 
 
@@ -177,10 +191,15 @@ class PurePursuit(Node):
                 # self.get_logger().info(f"current the robot is headed to {robot_angle_in_degrees} degrees")
                 # self.get_logger().info(f"The angle of the point in robot's frame is {angle_in_robot_frame_degrees} degrees")
 
-
+            # dist_to_end = np.linalg.norm([self.trajectory.points[-1][0] - robot_pose[0], self.trajectory.points[-1][1] - robot_pose[1]])
+            # self.get_logger().info(f'distance to end is {dist_to_end}')
+            # if dist_to_end < 1:
+            #     self.reached_end = True
+                
+            
             # # ACTUAL PURE PURSUIT
             # self.get_logger().info(f"lookahead angle{lookahead_angle}")
-            self.get_logger().info(f"too far parameter is set to {too_far}")
+            # self.get_logger().info(f"too far parameter is set to {too_far}")
             if math.sin(angle_in_robot_frame) == 0:
                 turn_radius = 1000
             else:
@@ -188,14 +207,21 @@ class PurePursuit(Node):
             steer_angle = math.atan(self.wheelbase_length/turn_radius) if not too_far else 0.
             # self.cmd_speed = max(1.0-math.exp(-self.exp_speed_coeff*(lookahead-self.parking_distance)),self.close_speed) # this is from panos code
 
-            self.get_logger().info(f"currently the car is being steered at the steering angle {steer_angle}")
+            # self.get_logger().info(f"currently the car is being steered at the steering angle {steer_angle}")
             # self.get_logger().info(f"reached end parameter is set to {self.reached_end}")
 
             dist_to_end = np.linalg.norm([self.trajectory.points[-1][0] - robot_pose[0], self.trajectory.points[-1][1] - robot_pose[1]])
-            self.cmd_speed = 1.0 if dist_to_end > 1 else 0.0
+            self.cmd_speed = self.speed if dist_to_end > 1 else 0.0
+            if dist_to_end <= 1:
+                time_to_finish = (self.get_clock().now()-self.start_time).nanoseconds*1e-9
+                self.get_logger().info(f'TIME TO FINISH: {time_to_finish}')
+                time_to_finish_msg = Float32()
+                time_to_finish_msg.data = time_to_finish
+                self.time_to_finish_pub.publish(time_to_finish_msg)
+                self.kill_yourself = True
 
             self.drive_cmd(steer_angle, self.cmd_speed)
-
+            
 
 
 
@@ -234,6 +260,18 @@ class PurePursuit(Node):
         self.trajectory.publish_viz(duration=0.0)
 
         self.initialized_traj = True
+        self.kill_yourself = False
+
+        self.total_path_length = 0
+        for i in range(len(self.trajectory.points)-1):
+            self.total_path_length += math.sqrt((self.trajectory.points[i+1][0]-self.trajectory.points[i][0])**2+(self.trajectory.points[i+1][1]-self.trajectory.points[i][1])**2)
+        
+        self.get_logger().info(f'TOTAL PATH LENGTH: {self.total_path_length}')
+        total_path_length_msg = Float32()
+        total_path_length_msg.data = self.total_path_length
+        self.total_path_length_pub.publish(total_path_length_msg)
+        
+        self.start_time = self.get_clock().now()
 
 
     def fake_callback(self, extra):

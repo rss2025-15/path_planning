@@ -180,7 +180,7 @@ class PathPlan(Node):
         self.map_height = msg.info.height
         self.map_width = msg.info.width
         g = np.transpose(np.reshape(msg.data, (self.map_height, self.map_width)))
-        self.map = np.where(g == -1, 1, g)
+        self.map = np.where(np.logical_or(g == -1, g == 100), 1, g)
         self.origin = (msg.info.origin.position.x, msg.info.origin.position.y, euler_from_quaternion(msg.info.origin.orientation)[2])
         self.resolution = msg.info.resolution
 
@@ -191,12 +191,12 @@ class PathPlan(Node):
 
     def pose_cb(self, pose):
         self.init_pose = (pose.pose.pose.position.x, pose.pose.pose.position.y, euler_from_quaternion(pose.pose.pose.orientation)[2])
-        self.get_logger().info(f'INITIAL POSE: {self.init_pose}')
+        # self.get_logger().info(f'INITIAL POSE: {self.init_pose}')
         # self.clear_rrt()
 
     def pose_estimate_cb(self, odom):
         self.init_pose = (odom.pose.pose.position.x, odom.pose.pose.position.y, euler_from_quaternion(odom.pose.pose.orientation)[2])
-        self.get_logger().info(f'INITIAL POSE: {self.init_pose}')
+        # self.get_logger().info(f'INITIAL POSE: {self.init_pose}')
         # self.clear_rrt()
 
     def goal_cb(self, msg):
@@ -391,6 +391,7 @@ class PathPlan(Node):
         Also shortcutting afterwards to remove jerky parts of the path (sample pairs of points in the path randomly or start from the end and go backwards?)
         """
         # self.goal_idx = None
+        start_time = self.get_clock().now()
         self.clear_rrt()
         self.start_id = self.add_node(start_point, 0)
         i = 0
@@ -453,13 +454,17 @@ class PathPlan(Node):
             path = dubins.shortest_path(start_pose, end_pose, self.min_turn_radius)
             steps, _ = path.sample_many(self.check_discretization_dist)
             can_shortcut = True
-            for step in steps[:-1]:
+            for step in steps:
                 x, y, theta = step
                 if self.taken(x, y):
                     can_shortcut = False
             if not can_shortcut:
                 continue
             del self.path[u+1:v]
+
+        end_time = self.get_clock().now()
+        elapsed_time = (end_time - start_time).nanoseconds / 1e9
+        self.get_logger().info("Path planning took {} seconds".format(elapsed_time))
                         
         # publish trajectory
         self.trajectory.clear()

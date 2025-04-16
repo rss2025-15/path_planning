@@ -1,3 +1,33 @@
-trajectory_planner:
+trajectory_planner_astar:
   ros__parameters:
-    parameter: "fill this in :)"
+    odom_topic: "/vesc/odom"
+    map_topic: "/map"
+    scan_topic: "/scan"
+    initial_pose_topic: "/initialpose"
+    pose_estimate_topic: "/pf/pose/odom" # hmm
+trajectory_planner_rrt:
+  ros__parameters:
+    odom_topic: "/vesc/odom"
+    map_topic: "/map"
+    scan_topic: "/scan"
+    pose_estimate_topic: "/pf/pose/odom"
+    initial_pose_topic: "/initialpose"
+    car_length: 0.45
+    max_steer: 0.8
+    dilate_radius: 1
+    sample_goal_prob: 0.1
+    neighbor_type: "num" # num or radius
+    neighbor_num: 10
+    neighbor_radius: 2.0
+    num_iters: 50
+    dist_limit: True
+    discretize_path_progress: True
+    progress_discretization_dist: 0.5
+    discretize_path_publish: True
+    publish_discretization_dist: 0.5
+    check_discretization_dist: 0.1
+    shortcutting_iters: 20
+trajectory_follower:
+  ros__parameters:
+    odom_topic: "/vesc/odom"
+    drive_topic: "/vesc/low_level/input/navigation"

@@ -68,7 +68,7 @@ class PathPlan(Node):
         self.DOWNSAMPLED_ROWS = None
         self.DOWNSAMPLED_COLS = None
         self.pos = (0, 0)
-        self.dilation = 5
+        self.dilation = 1
         self.map_initialized = False
 
         self.get_logger().info("Trajectory planner node started")
@@ -85,11 +85,12 @@ class PathPlan(Node):
 
         g = np.transpose(np.reshape(msg.data, (self.ROWS, self.COLS)))
         self.map = np.where(np.logical_or(g == -1, g == 100), 1, g)
-        # self.get_logger().info(f"map: {self.map}")
+        
         self.map = cv2.dilate(self.map.astype('uint8'), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.dilation, self.dilation)))
 
         # self.downsampled_map = self.map[::self.downsampling_factor, ::self.downsampling_factor]
         self.downsampled_map = self.maxpool2d(self.map, self.downsampling_factor)
+        
         self.DOWNSAMPLED_ROWS = self.downsampled_map.shape[0]
         self.DOWNSAMPLED_COLS = self.downsampled_map.shape[1]
         self.get_logger().info("Downsampled map size: {} x {}".format(self.DOWNSAMPLED_ROWS, self.DOWNSAMPLED_COLS))
@@ -102,7 +103,6 @@ class PathPlan(Node):
     def goal_cb(self, msg):
         self.goal = (msg.pose.position.x, msg.pose.position.y)
         self.get_logger().info("Goal received")
-        # imageio.imwrite("./src/path_planning/map.png", self.downsampled_map)
         self.plan_path(self.pos, (msg.pose.position.x, msg.pose.position.y), self.downsampled_map)
 
     def plan_path(self, start_point, end_point, map):
@@ -131,8 +131,15 @@ class PathPlan(Node):
         self.get_logger().info("Path found")
         self.get_logger().info("Path length: {}".format(len(path)))
         self.get_logger().info("Path: {}".format(path))
+        vis_map = (self.downsampled_map * 255).astype('uint8')
+        vis_map = cv2.cvtColor(vis_map, cv2.COLOR_GRAY2BGR)  # Convert to color
         for point in path:
             self.trajectory.addPoint(self.map_to_grid(point, resolution))
+            x, y = point
+            cv2.circle(vis_map, (y, x), radius=1, color=(255, 0, 0), thickness=-1)  # RGB
+
+        # Save the image
+        imageio.imwrite("./src/path_planning/map.png", vis_map)
 
         end_time = self.get_clock().now()
         elapsed_time = (end_time - start_time).nanoseconds / 1e9
